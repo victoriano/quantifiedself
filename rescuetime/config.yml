@@ -1,0 +1,69 @@
+# RescueTime Data Collection Configuration
+
+# Date range for data collection
+dates:
+  start_date: "2023-01-01"
+  end_date: "2025-03-06"
+  
+# Domains to track with hierarchical categorization
+domains:
+  - name: "graphext.com"
+    group: "work"
+    subgroup: "graphext"
+  
+  - name: "x.com"
+    group: "social"
+    subgroup: "twitter"
+  
+  - name: "twitter.com"
+    group: "social"
+    subgroup: "twitter"
+  
+  # Example of adding other domains
+  # - name: "github.com"
+  #   group: "work"
+  #   subgroup: "development"
+  # 
+  # - name: "stackoverflow.com"
+  #   group: "work" 
+  #   subgroup: "development"
+
+# Group/subgroup output settings
+groups:
+  # Main groups
+  - name: "work"
+    output_dir: "rescuetime_data"
+    output_file: "work_history.parquet"
+    
+  - name: "social"
+    output_dir: "rescuetime_data"
+    output_file: "social_history.parquet"
+
+  # Subgroups
+  - name: "graphext"
+    parent: "work"
+    output_dir: "rescuetime_data"
+    output_file: "graphext_history.parquet"
+    
+  - name: "twitter"
+    parent: "social"
+    output_dir: "rescuetime_data"
+    output_file: "twitter_history.parquet"
+    
+  # Example for future subgroups
+  # - name: "development"
+  #   parent: "work"
+  #   output_dir: "rescuetime_data"
+  #   output_file: "development_history.parquet"
+  
+  # Special group for all domains combined
+  - name: "all"
+    output_dir: "rescuetime_data"
+    output_file: "all_domains_history.parquet"
+  
+# Advanced settings
+settings:
+  chunk_months: 3  # Size of date chunks in months for fetch_long_period.py
+  detailed_data: true  # Whether to get most detailed data available
+  combine_all: true  # Whether to also create a combined file with all domains
+  combine_by_group: true  # Whether to create files for each main group 
