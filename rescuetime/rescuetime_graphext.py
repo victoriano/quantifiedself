@@ -37,7 +37,7 @@ class RescueTimeAPI:
         self.api_key = api_key
     
     def get_raw_detailed_data(self, domain="graphext.com", start_date=None, end_date=None, 
-                              include_timestamps=True, output_format="parquet"):
+                              include_timestamps=True, output_format="parquet", group=None, subgroup=None):
         """
         Retrieve the most granular, disaggregated data available from RescueTime API
         for a specific domain. Optimized for data pipeline integration (e.g., Dagster).
@@ -48,6 +48,8 @@ class RescueTimeAPI:
             end_date (str): End date in YYYY-MM-DD format (default: today)
             include_timestamps (bool): Include timestamp when the data was fetched
             output_format (str): Format of output - 'polars', 'parquet', 'dict', or 'json'
+            group (str, optional): Group category for this domain
+            subgroup (str, optional): Subgroup category for this domain
             
         Returns:
             Data in the requested format (Polars DataFrame, ParquetBytes, dict, or JSON string)
@@ -129,6 +131,12 @@ class RescueTimeAPI:
                     pl.lit(fetch_timestamp).alias("fetch_timestamp"),
                     pl.lit(domain).alias("query_domain")
                 ])
+            
+            # Add group and subgroup columns if provided
+            if group:
+                filtered_df = filtered_df.with_columns(pl.lit(group).alias("group"))
+            if subgroup:
+                filtered_df = filtered_df.with_columns(pl.lit(subgroup).alias("subgroup"))
             
             # Return in requested format
             if output_format == "polars":
@@ -381,6 +389,8 @@ def main():
     parser.add_argument("--raw-format", choices=["polars", "parquet", "dict", "json"], default="parquet", 
                       help="Output format for raw data (default: parquet)")
     parser.add_argument("--raw-output", help="File to save raw output (if using --raw), defaults to graphext_data.parquet")
+    parser.add_argument("--group", help="Group category for this domain (for categorization)")
+    parser.add_argument("--subgroup", help="Subgroup category for this domain (for categorization)")
     
     args = parser.parse_args()
     
@@ -399,7 +409,9 @@ def main():
             domain=args.domain,
             start_date=args.start, 
             end_date=args.end,
-            output_format=args.raw_format
+            output_format=args.raw_format,
+            group=args.group,
+            subgroup=args.subgroup
         )
         
         # Handle the output based on format
@@ -407,6 +419,12 @@ def main():
             if raw_data.is_empty():
                 print("No data returned.")
             else:
+                # Add group and subgroup columns if provided
+                if args.group:
+                    raw_data = raw_data.with_columns(pl.lit(args.group).alias("group"))
+                if args.subgroup:
+                    raw_data = raw_data.with_columns(pl.lit(args.subgroup).alias("subgroup"))
+                
                 print(f"Retrieved {raw_data.height} records.")
                 print("\nSample data (first 5 rows):")
                 print(raw_data.head())

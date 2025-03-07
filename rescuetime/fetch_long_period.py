@@ -109,7 +109,7 @@ def fetch_domain_data(domain, start_date, end_date, chunk_months):
         output_file = f"{output_dir}/{domain_base}_{chunk_start}_to_{chunk_end}.parquet"
         output_files.append(output_file)
         
-        # Build the command
+        # Build the command with additional parameters for category information
         cmd = [
             "uv", "run", "rescuetime_graphext.py",
             "--raw",
@@ -118,6 +118,12 @@ def fetch_domain_data(domain, start_date, end_date, chunk_months):
             "--domain", domain_name,
             "--raw-output", output_file
         ]
+        
+        # Add group/subgroup info to the command if available
+        if 'group' in domain:
+            cmd.extend(["--group", domain['group']])
+        if 'subgroup' in domain:
+            cmd.extend(["--subgroup", domain['subgroup']])
         
         # Execute the command
         print(f"Running: {' '.join(cmd)}")

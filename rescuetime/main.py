@@ -35,10 +35,12 @@ def fetch_all_data(config, args):
     """
     print(f"\n[{timestamp()}] STARTING DATA FETCHING PHASE")
     
-    # Get dates and settings
-    start_date = config['dates']['start_date']
-    end_date = config['dates']['end_date']
+    # Get dates from command line args or fall back to config file
+    start_date = args.start_date if args.start_date else config['dates']['start_date']
+    end_date = args.end_date if args.end_date else config['dates']['end_date']
     chunk_months = config['settings']['chunk_months']
+    
+    print(f"[{timestamp()}] Date range: {start_date} to {end_date}")
     
     # Filter domains based on command line arguments
     domains_to_process = []
@@ -47,6 +49,11 @@ def fetch_all_data(config, args):
         # Find the specific domain
         for domain in config['domains']:
             if domain['name'] == args.domain:
+                # If command line has explicit group/subgroup, override the config
+                if args.group:
+                    domain['group'] = args.group
+                if args.subgroup:
+                    domain['subgroup'] = args.subgroup
                 domains_to_process.append(domain)
                 break
         if not domains_to_process:
@@ -77,13 +84,28 @@ def fetch_all_data(config, args):
             print(f"Error: No domains found in subgroup '{args.subgroup}'.")
             sys.exit(1)
     else:
-        # Process all domains
+        # Process all domains with their configured group/subgroup values
         domains_to_process = config['domains']
     
     # Process each domain
     all_domains_files = {}
     for i, domain in enumerate(domains_to_process):
         print(f"\n[{timestamp()}] Processing domain {i+1}/{len(domains_to_process)}: {domain['name']}")
+        
+        # Ensure the domain has proper group and subgroup information from the config
+        if 'group' not in domain:
+            print(f"Warning: Domain '{domain['name']}' has no group specified in config. Using default.")
+            domain['group'] = "uncategorized"
+        
+        # Print category information
+        category_info = f"domain '{domain['name']}'"
+        if 'group' in domain and 'subgroup' in domain:
+            category_info = f"domain '{domain['name']}' (group: {domain['group']}, subgroup: {domain['subgroup']})"
+        elif 'group' in domain:
+            category_info = f"domain '{domain['name']}' (group: {domain['group']})"
+            
+        print(f"[{timestamp()}] Fetching data for {category_info}")
+        
         output_files = fetch_domain_data(domain, start_date, end_date, chunk_months)
         all_domains_files[domain['name']] = output_files
     
@@ -247,6 +269,14 @@ def main():
         help="Process only domains in this subgroup (optional)"
     )
     parser.add_argument(
+        "--start-date", 
+        help="Override start date from config (YYYY-MM-DD format)"
+    )
+    parser.add_argument(
+        "--end-date", 
+        help="Override end date from config (YYYY-MM-DD format)"
+    )
+    parser.add_argument(
         "--skip-fetch", 
         action="store_true", 
         help="Skip the data fetching phase"
@@ -286,11 +316,15 @@ def main():
     group_count = sum(1 for g in config['groups'] if not g.get('is_subgroup', False) and g['name'] != 'all')
     subgroup_count = sum(1 for g in config['groups'] if g.get('is_subgroup', False))
     
+    # Get dates (either from args or config)
+    start_date = args.start_date if args.start_date else config['dates']['start_date']
+    end_date = args.end_date if args.end_date else config['dates']['end_date']
+    
     print(f"[{timestamp()}] Pipeline configured for:")
     print(f"- {domain_count} domains")
     print(f"- {group_count} main groups")
     print(f"- {subgroup_count} subgroups")
-    print(f"- Date range: {config['dates']['start_date']} to {config['dates']['end_date']}")
+    print(f"- Date range: {start_date} to {end_date}")
     
     # Run the pipeline
     if not args.skip_fetch:

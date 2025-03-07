@@ -30,10 +30,38 @@ def combine_parquet_files(files, output_file):
     # Read and combine all files
     dfs = []
     total_rows = 0
+    required_columns = ["group", "subgroup"]
+    
+    # First pass: read all dataframes and collect all column names to create a unified schema
+    all_columns = set()
     
     for file in files:
         try:
             df = pl.read_parquet(file)
+            all_columns.update(df.columns)
+        except Exception as e:
+            print(f"Error reading {file} during schema discovery: {e}")
+    
+    print(f"Unified schema will include these columns: {sorted(list(all_columns))}")
+    
+    # Second pass: read again and ensure all dataframes have the same columns
+    for file in files:
+        try:
+            df = pl.read_parquet(file)
+            
+            # Add missing columns with default values
+            for col in all_columns:
+                if col not in df.columns:
+                    # Choose appropriate default values based on column name
+                    if col in ["group", "subgroup"]:
+                        df = df.with_columns(pl.lit("unknown").alias(col))
+                    elif "seconds" in col.lower() or col == "Productivity":
+                        df = df.with_columns(pl.lit(0).alias(col))
+                    elif col == "Number of People":
+                        df = df.with_columns(pl.lit(1).alias(col))
+                    else:
+                        df = df.with_columns(pl.lit("").alias(col))
+            
             rows = df.height
             total_rows += rows
             print(f"Read {file}: {rows} rows")
@@ -49,9 +77,14 @@ def combine_parquet_files(files, output_file):
     print("\nCombining data...")
     combined_df = pl.concat(dfs)
     
-    # Save the combined data
     # Ensure output directory exists
     os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
+    
+    # Print the schema of the combined dataframe
+    print("\nSchema of combined data:")
+    for col in combined_df.columns:
+        dtype = combined_df.schema[col]
+        print(f"- {col}: {dtype}")
     
     combined_df.write_parquet(output_file)
     print(f"Combined data saved to {output_file}")
@@ -88,6 +121,18 @@ def print_data_summary(df, domain_names, category_type=None, category_name=None)
     total_hours = total_seconds / 3600
     print(f"Total time spent: {total_hours:.2f} hours across {', '.join(domain_names)}")
     
+    # Check if group and subgroup columns exist
+    if "group" in df.columns and "subgroup" in df.columns:
+        # Show time breakdown by group/subgroup
+        print("\nTime breakdown by category:")
+        group_summary = df.group_by(["group", "subgroup"]).agg(
+            pl.sum("Time Spent (seconds)").alias("total_seconds")
+        ).with_columns(
+            (pl.col("total_seconds") / 3600).alias("hours")
+        ).sort(pl.col("total_seconds"), descending=True)
+        
+        print(group_summary)
+    
     # Top days with most activity (aggregating by date)
     try:
         date_only = df.with_columns(
@@ -121,6 +166,16 @@ def collect_domain_files(domains, domain_base_names=None):
     if domain_base_names is None:
         domain_base_names = {}
     
+    # First, delete any previously generated combined files to avoid recursion
+    for domain in domains:
+        if 'output_file' in domain and os.path.exists(os.path.join(domain.get('output_dir', ''), domain['output_file'])):
+            try:
+                os.remove(os.path.join(domain.get('output_dir', ''), domain['output_file']))
+                print(f"Removed previous combined file: {os.path.join(domain.get('output_dir', ''), domain['output_file'])}")
+            except Exception as e:
+                print(f"Warning: Could not remove previous combined file: {e}")
+    
+    # Now collect new files
     for domain in domains:
         data_dir = domain['output_dir']
         
@@ -137,6 +192,16 @@ def collect_domain_files(domains, domain_base_names=None):
         
         # Find all Parquet files for this domain
         parquet_files = glob.glob(f"{data_dir}/{domain_base}_*.parquet")
+        
+        # Sort by modification time to use the most recent files
+        parquet_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        
+        # Print information about found files
+        if parquet_files:
+            newest_file = parquet_files[0]
+            newest_time = datetime.fromtimestamp(os.path.getmtime(newest_file))
+            print(f"Found {len(parquet_files)} files for domain '{domain['name']}'. Most recent: {newest_file} ({newest_time})")
+        
         all_files.extend(parquet_files)
     
     return all_files
